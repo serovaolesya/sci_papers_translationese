@@ -14,6 +14,7 @@ from math import comb
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import gensim.downloader as api
 import numpy as np
 import stanza
 from colorama import Fore, Style
@@ -48,6 +49,8 @@ from tools.core.constants import (
 console = Console()
 
 BASE_DIR = Path(__file__).resolve().parent
+MODEL_KV_PATH = BASE_DIR / "ruscorpora_upos_skipgram_300_5_2018.kv"
+MODEL_BIN_PATH = BASE_DIR / "model.bin"
 
 # Части речи, исключаемые при анализе
 EXCLUDE_UPOS = frozenset({
@@ -124,35 +127,49 @@ def init_pipeline(language: str = 'ru') -> stanza.Pipeline:
         verbose=False,
     )
 
+def ensure_cohesion_model() -> Path:
+    """
+    Проверяет наличие локальной модели лексической когезии.
+
+    Приоритет:
+      1. Если задан TAYGA_VEC_PATH и файл существует — используем его.
+      2. Если рядом есть model.bin — используем его.
+      3. Если рядом есть ruscorpora_upos_skipgram_300_5_2018.kv — используем его.
+      4. Иначе скачиваем word2vec-ruscorpora-300 через gensim
+         и сохраняем как ruscorpora_upos_skipgram_300_5_2018.kv.
+    """
+    env_path = os.environ.get("TAYGA_VEC_PATH")
+    if env_path and os.path.isfile(env_path):
+        return Path(env_path)
+
+    if MODEL_BIN_PATH.is_file():
+        return MODEL_BIN_PATH
+
+    if MODEL_KV_PATH.is_file():
+        return MODEL_KV_PATH
+
+    model = api.load("word2vec-ruscorpora-300")
+    model.save(str(MODEL_KV_PATH))
+
+    return MODEL_KV_PATH
 
 @lru_cache(maxsize=1)
 def load_model() -> KeyedVectors:
     """
     Загружает Word2Vec-модель (кешируется: загружается ровно один раз).
 
-    Приоритет поиска модели:
-      1. Переменная среды TAYGA_VEC_PATH (если задана и файл существует).
-      2. add_later/lexical_cohesion/model.bin  (Taiga, binary Word2Vec).
-      3. add_later/lexical_cohesion/ruscorpora_upos_skipgram_300_5_2018.kv  (RusCorpora, KeyedVectors).
+    Если локальная модель отсутствует, она будет автоматически скачана
+    через gensim как word2vec-ruscorpora-300 и сохранена в папку
+    tools/explicitation/.
     """
-    env_path = os.environ.get("TAYGA_VEC_PATH")
-    if env_path and os.path.isfile(env_path):
-        return KeyedVectors.load_word2vec_format(env_path, binary=True)
+    model_path = ensure_cohesion_model()
 
-    bin_path = BASE_DIR / "model.bin"
-    if bin_path.is_file():
-        return KeyedVectors.load_word2vec_format(str(bin_path), binary=True)
+    # Если используется внешний/локальный бинарный файл Taiga
+    if str(model_path).endswith(".bin") or str(model_path).endswith(".bin.gz"):
+        return KeyedVectors.load_word2vec_format(str(model_path), binary=True)
 
-    kv_path = BASE_DIR / "ruscorpora_upos_skipgram_300_5_2018.kv"
-    if kv_path.is_file():
-        return KeyedVectors.load(str(kv_path), mmap="r")
-
-    raise FileNotFoundError(
-        f"Word2Vec модель не найдена в {BASE_DIR}.\n"
-        "Убедитесь, что файл model.bin или "
-        "ruscorpora_upos_skipgram_300_5_2018.kv присутствует в папке "
-        "tools/explicitation/."
-    )
+    # Если используется сохранённый KeyedVectors-файл
+    return KeyedVectors.load(str(model_path), mmap="r")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

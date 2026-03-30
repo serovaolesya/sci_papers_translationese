@@ -105,6 +105,7 @@ from tools.explicitation.lexical_cohesion import (
     init_pipeline as init_cohesion_pipeline,
     OptimizedVectorCache,
     analyze_text_cohesion,
+    ensure_cohesion_model,
 )
 # Импорты для "Interference_features"
 from tools.interference.n_grams_analyzer import (
@@ -1194,6 +1195,7 @@ class CorpusText:
 
 
 def start_analysis():
+    ensure_cohesion_model()
     print_greeting()
 
     while True:
