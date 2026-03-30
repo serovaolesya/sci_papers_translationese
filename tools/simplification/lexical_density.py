@@ -1,74 +1,62 @@
 # -*- coding: utf-8 -*- # Языковая кодировка UTF-8
-import re
-
-from colorama import Fore, Style
+from colorama import Fore, Style, init
 from rich.console import Console
 from rich.table import Table
 
 from tools.core.utils import wait_for_enter_to_analyze
-from tools.core.lemmatizators import lemmatize_words
-from tools.core.stop_words_extraction_removal import all_stopwords_sorted
-from tools.core.text_preparation import TextPreProcessor
 
 console = Console()
-
-# Предкомпилируем регулярные выражения
-compiled_patterns = re.compile(r"[^А-Яа-яёЁa-zA-Z0-9\-]+")
-compiled_stopwords = [re.compile(r'\b' + re.escape(stopword) + r'\b', re.IGNORECASE) for stopword in
-                      all_stopwords_sorted]
-
-def remove_stopwords(text, stopwords):
-    """Удаляем стоп-слова из текста и подсчитываем количество удаленных слов."""
-    stopwords_count = 0
-    for pattern in stopwords:
-        matches = pattern.findall(text)
-        stopwords_count += len(matches)
-        text = pattern.sub('', text)
-    return re.sub(r'\s+', ' ', text).strip(), stopwords_count
+init(autoreset=True)
 
 
-def calculate_lexical_density(text, show_analysis=True):
+def calculate_lexical_density(
+        total_alpha_tokens_count: int,
+        lemmatized_content_words: list,
+        show_analysis=True
+):
     """
     Рассчитывает лексическую плотность текста, определяя соотношение
     знаменательных слов (содержательных частей речи, а именно глаголов,
-    существительных, прилагательных и наречий) к общему количеству
+    существительных, прилагательных и наречий) к общему числу
     слов в тексте.
 
-    :param text (str): Входной текст для анализа.
+    :param total_alpha_tokens_count: Общее количество словарных токенов.
+    :param lemmatized_content_words: Список лемм знаменательных слов.
     :param show_analysis: Boolean.
     :return float: лексическая плотность текста, выраженная в процентах.
     """
-
-    # Предобработка текста: замена аббревиатур и исправление пробелов
-    text_processor = TextPreProcessor()
-    text = text_processor.process_text(text)
-
-    # Используем предкомпилированное регулярное выражение
-    text = compiled_patterns.sub(' ', text)
-    all_words = len(re.findall(r'\b\w+\b', text))
-
-    text_without_stopwords, stopwords_count = remove_stopwords(text, compiled_stopwords)
-    words = lemmatize_words(text_without_stopwords)
-    content_words = [token.normal_form for token in words if
-                     token.tag.POS in {'NOUN', 'VERB', 'INFN', 'PRTF', 'PRTS', 'GRND', 'PRED', 'ADJF', 'ADJS', 'COMP',
-                                       'ADVB'} and token.normal_form not in {'быть', 'являться'}]
-    if len(content_words) == 0:
+    if len(lemmatized_content_words) == 0:
         if show_analysis:
-            print(Fore.GREEN + Style.BRIGHT + "\n        ЛЕКСИЧЕСКАЯ ПЛОТНОСТЬ ТЕКСТА")
-            print(Fore.LIGHTRED_EX + "В тексте нет слов для анализа лексической плотности.")
+            print(Fore.GREEN + Style.BRIGHT +
+                  "\n        ЛЕКСИЧЕСКАЯ ПЛОТНОСТЬ ТЕКСТА")
+            print(Fore.LIGHTRED_EX +
+                  "В тексте нет слов для анализа лексической плотности.")
         return 0
-    lexical_density = round(len(content_words) / all_words * 100, 3)
+    lexical_density = round(
+        len(lemmatized_content_words) / total_alpha_tokens_count * 100, 3
+    )
 
     if show_analysis:
-        print(Fore.GREEN + Style.BRIGHT + "\n        ЛЕКСИЧЕСКАЯ ПЛОТНОСТЬ ТЕКСТА" + Fore.RESET)
+        print(Fore.GREEN + Style.BRIGHT +
+              "\n        ЛЕКСИЧЕСКАЯ ПЛОТНОСТЬ ТЕКСТА")
+
+        print(
+            Fore.RED +
+            "Внимание! При подсчете показателя лексической "
+            "\nплотности знаменательными словами считаются имена "
+            "\nсуществительные, прилагательные, глаголы и наречия.")
 
         table = Table()
-        table.add_column("Параметр", justify="left", no_wrap=True, min_width=30, style="bold")
+        table.add_column("Параметр", justify="left",
+                         no_wrap=True, min_width=30, style="bold")
         table.add_column("Значение", justify="center", min_width=10)
 
-        table.add_row("Лексическая плотность", f"{lexical_density:.2f}%")
-        table.add_row("\nОбщее количество слов в тексте", '\n' + str(all_words))
-        table.add_row("Количество знаменательных слов", str(len(content_words)))
+        table.add_row("Лексическая плотность (%)",
+                      f"{lexical_density:.2f}")
+        table.add_row("\nВсего слов в тексте",
+                      '\n' + str(total_alpha_tokens_count))
+        table.add_row("Знаменательных слов (на рус. яз)",
+                      str(len(lemmatized_content_words)))
 
         console.print(table)
         wait_for_enter_to_analyze()
@@ -87,6 +75,23 @@ if __name__ == "__main__":
     умиротворённости и спокойствия. Солнце постепенно уходило за горизонт, окутывая парк мягким оранжевым светом. Небо 
     меняло свой цвет, переходя от светло-голубого к насыщенному розовому. Птицы готовились к ночи, прячась в ветвях 
     деревьев. Где-то рядом слышался тихий плеск воды из фонтана. Люди начинали расходиться по домам, постепенно покидая 
-    парк. И вот, когда город погрузился в вечерние сумерки, наступила долгожданная тишина.
+    парк. И вот, когда город погрузился в вечерние сумерки, наступила долгожданная тишина за вычетом на основании.
     """
-    calculate_lexical_density(text)
+    import re
+
+    from tools.core.lemmatizators import lemmatize_words_without_stopwords
+
+    parsed_text_without_stopwords, removed_stop_w_count = (
+        lemmatize_words_without_stopwords(text)
+    )
+    # Список лемм знаменательных слов (Cyrillic и Latin)
+    lemmatized_content_words = [
+        token.normal_form for token in parsed_text_without_stopwords
+    ]
+    total_alpha_tokens_count = (
+        len(re.findall(r'\b\w+\b', text))
+    )
+    calculate_lexical_density(
+        total_alpha_tokens_count, lemmatized_content_words
+    )
+

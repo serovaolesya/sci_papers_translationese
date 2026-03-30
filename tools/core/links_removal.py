@@ -4,6 +4,7 @@ import re
 
 from colorama import Fore, Style, init
 
+from tools.core.constants import INCORRECT_CHOICE
 from tools.core.utils import wait_for_enter_to_choose_opt
 
 
@@ -125,28 +126,35 @@ def main():
                 elif dir_choice == '3':
                     directory = "../ht_texts/"
                 else:
-                    print(Fore.LIGHTRED_EX + Style.BRIGHT + "\nНеверный выбор. Попробуйте снова." + Fore.RESET)
+                    print(INCORRECT_CHOICE)
                     continue
 
-                file_name = input(Fore.LIGHTGREEN_EX + "Введите название файла в"
-                                                        " выбранной директории "
-                                                        "(только файлы .txt): " + Fore.RESET).strip()
+                file_name = input(
+                    Fore.LIGHTGREEN_EX +
+                    "Введите название файла в"
+                    " выбранной директории "
+                    "(только файлы .txt): "
+                ).strip()
                 file_path = directory + file_name + '.txt'
                 if os.path.isfile(file_path):
                     process_text_from_file(file_path, dir_choice)
                 else:
                     print(
-                        Fore.LIGHTRED_EX + Style.BRIGHT + "Файл не найден. Проверьте путь и попробуйте снова." + Fore.RESET)
+                        Fore.LIGHTRED_EX + Style.BRIGHT +
+                        "Файл не найден. Проверьте путь "
+                        "и попробуйте снова.")
                 continue
 
         elif mode.lower().strip() == 't':
             while True:
-                print(Fore.GREEN + Style.BRIGHT + "\nВыберите тип текста." + Fore.RESET)
+                print(Fore.GREEN + Style.BRIGHT +
+                      "\nВыберите тип текста.")
                 print(Fore.BLACK + "1. Аутентичный текст")
                 print(Fore.BLACK + "2. Машинный перевод")
                 print(Fore.BLACK + "3. Перевод, сделанный человеком")
                 text_type_choice = input(
-                    Fore.GREEN + Style.BRIGHT + "Введите номер типа текста: " + Fore.RESET).strip()
+                    Fore.GREEN + Style.BRIGHT +
+                    "Введите номер типа текста: ").strip()
 
                 # Выбор места сохранения
                 if text_type_choice == '1':
@@ -156,7 +164,7 @@ def main():
                 elif text_type_choice == '3':
                     save_directory = "../ht_ready/"
                 else:
-                    print(Fore.LIGHTRED_EX + Style.BRIGHT + "Неверный выбор. Попробуйте снова." + Fore.RESET)
+                    print(INCORRECT_CHOICE)
                     continue
 
                 # Ввод текста вручную
@@ -194,12 +202,12 @@ def main():
             wait_for_enter_to_choose_opt()
             break
         else:
-            print(Fore.LIGHTRED_EX + Style.BRIGHT + "Неверный выбор. Попробуйте снова." + Fore.RESET)
+            print(INCORRECT_CHOICE)
 
 
 def get_full_input():
     print(Fore.LIGHTGREEN_EX + Style.BRIGHT + "\nВведите текст для анализа (по окончанию ввода с красной строки"
-                                       " напечатайте 'r' и нажмите 'Enter'):" + Fore.RESET)
+                                              " напечатайте 'r' и нажмите 'Enter'):" + Fore.RESET)
     input_lines = []
     while True:
         line = input()

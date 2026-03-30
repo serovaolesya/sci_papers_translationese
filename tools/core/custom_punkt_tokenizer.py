@@ -1,28 +1,38 @@
 # -*- coding: utf-8 -*- # Языковая кодировка UTF-8
-from nltk.tokenize.punkt import PunktSentenceTokenizer, PunktParameters
+from nltk.tokenize.punkt import (
+    PunktSentenceTokenizer,
+    PunktParameters
+)
 
 from tools.core.data.abbreviations import sorted_abbrev
 
 
 def sent_tokenize_with_abbr(text):
     text = text.replace('\n', '')
-    # Шаг 1:Cоздаём объект PunktParameters, который будет хранить наши настройки.
+    # Шаг 1:Cоздаём объект PunktParameters,
+    # который будет хранить наши настройки.
     punct_param = PunktParameters()
-    # Шаг 2: Добавление сокращений в параметр токенизатора abbrev_types.
-    # Это позволяет токенизатору учитывать их и не считать точку после этих сокращений как конец предложения.
-    punct_param.abbrev_types = sorted_abbrev
+    # Шаг 2: Добавление сокращений в параметр
+    # токенизатора abbrev_types.
+    # Это позволяет токенизатору учитывать их и не считать
+    # точку после этих сокращений как конец предложения.
+    punct_param.abbrev_types = punct_param.abbrev_types = {
+        abbr.lower() for abbr in sorted_abbrev
+    }
     # Шаг 3: Создание кастомного токенизатора с учётом настроек
     sentence_splitter_with_abbr = PunktSentenceTokenizer(punct_param)
 
     # Шаг 5: Токенизация текста на предложения
-    # Используем наш кастомный токенизатор для разбиения текста на предложения.
-    sentences = list(sentence_splitter_with_abbr.tokenize(text))
-    return sentences
+    # Используем наш кастомный токенизатор для
+    # разбиения текста на предложения.
+
+    return list(sentence_splitter_with_abbr.tokenize(text))
 
 
 if __name__ == "__main__":
     # Текст для примера (сгенерирован ИИ)
-    input_text = """В огромном городе, где небоскрёбы касались облаков, жила девушка по имени Лиза. Она работала в 
+    input_text = """
+    В огромном городе, где небоскрёбы касались облаков, жила девушка по имени Лиза. Она работала в 
     необычной организации под названием "Луч Света". Эта организация ставила перед собой амбициозную цель — помочь 
     каждому человеку на Земле и сделать мир добрее. Каждое утро Лиза приходила в светлый офис, наполненный зелёными 
     растениями и солнечными лучами, проникающими через огромные окна. Она садилась за свой стол и начинала день с 

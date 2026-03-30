@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*- # Языковая кодировка UTF-8
 import re
 
-from colorama import Fore, Style
+from colorama import Fore, Style, init
 from nltk.tokenize import word_tokenize
 
 from rich.console import Console
@@ -10,6 +10,7 @@ from rich.table import Table
 from tools.core.utils import wait_for_enter_to_analyze
 
 console = Console()
+init(autoreset=True)
 
 
 def mean_word_length_char(text, show_analysis=True):
@@ -17,10 +18,11 @@ def mean_word_length_char(text, show_analysis=True):
     Вычисляет среднюю длину слов в тексте в символах.
 
     :param text: Текст для анализа.
-    :param show_analysis: Если True, выводит результат в виде таблицы.
+    :param show_analysis: Если True,
+    выводит результат в виде таблицы.
     :return float: Средняя длина слов в символах.
     """
-    patterns = r"[^А-Яа-яёЁa-zA-Z\-]+"  # Оставляем кириллицу, латинские буквы и дефис
+    patterns = r"[^А-Яа-яёЁa-zA-Z\-]+"
     text = re.sub(patterns, ' ', text)
 
     # Разбиваем фильтрованный текст на слова, создаем их список
@@ -29,18 +31,24 @@ def mean_word_length_char(text, show_analysis=True):
     # Проверка на наличие слов
     if len(tokens) == 0:
         if show_analysis:
-            print("\n* В тексте нет слов для анализа средней длины слова.")
+            print(Fore.RED + Style.BRIGHT +
+                  "\n* Во введенном тексте "
+                  "слова отсутствуют.")
         return 0
     total_chars_num = sum(map(len, tokens))
     mean_word_length_in_chars = round(total_chars_num / len(tokens), 3)
 
     if show_analysis:
-        print(Fore.GREEN + Style.BRIGHT + "\n         СРЕДНЯЯ ДЛИНА СЛОВ В СИМВОЛАХ" + Fore.RESET)
+
+        print(Fore.GREEN + Style.BRIGHT +
+              "\n         СРЕДНЯЯ ДЛИНА СЛОВ В СИМВОЛАХ")
         table = Table()
-        table.add_column("Показатель", style="bold", justify="left", no_wrap=True, min_width=30)
+        table.add_column("Параметр", justify="left",
+                         no_wrap=True, min_width=30, style="bold")
         table.add_column("Значение", justify="center", min_width=10)
 
-        table.add_row("Длина в символах", str(mean_word_length_in_chars))
+        table.add_row("Длина в символах",
+                      str(mean_word_length_in_chars))
         console.print(table)
         wait_for_enter_to_analyze()
 
@@ -55,34 +63,37 @@ def count_syllables(text):
     :return int: Общее количество слогов в тексте.
     """
     syllables_count = 0
-    syllables = set("аяуюоеёэиы")  # что делать с англ словами?
+    syllables = set("аяуюоеёэиы")
     for syllable in text:
         if syllable in syllables:
             syllables_count += 1
     return syllables_count
 
 
-def calculate_syllable_ratio(text, show_in_console=True):
+def mean_word_length_syllab(
+        text, show_in_console=True
+):
     """
     Вычисляет показатель соотношения слогов к словам в тексте.
 
     :param text: Текст для анализа.
     :param show_in_console: Если True, выводит результат в виде таблицы.
-    :return: Кортеж из двух значений: соотношение слогов к словам и общее количество слогов.
+    :return: Кортеж из двух значений: соотношение слогов к словам
+    и общее количество слогов.
     """
-    patterns = r"[^А-Яа-яёЁ\-]+"  # Оставляем кириллицу и дефис
-    text = re.sub(patterns, ' ', text.lower())
+    patterns = r"[^А-Яа-яёЁ\-]+"
+    alpha_text = re.sub(patterns, ' ', text.lower())
     # Разбиваем фильтрованный текст на слова, создаем их список
-    tokens = word_tokenize(text, language="russian")
-
-    if len(tokens) == 0:
+    alpha_tokens = word_tokenize(alpha_text, language="russian")
+    if len(alpha_tokens) == 0:
         if show_in_console:
-            print("\n* В тексте нет слов для анализа соотношения слогов ко всем словам.")
+            print_syllable_ratio_table(0, 0)
+            wait_for_enter_to_analyze()
         return 0, 0
 
-    combined_words_str = ' '.join(tokens)
+    combined_words_str = ' '.join(alpha_tokens)
     syllables_count = count_syllables(combined_words_str)
-    syllable_ratio = round((syllables_count / len(tokens)), 3)
+    syllable_ratio = round((syllables_count / len(alpha_tokens)), 3)
     if show_in_console:
         print_syllable_ratio_table(syllable_ratio, syllables_count)
         wait_for_enter_to_analyze()
@@ -97,10 +108,15 @@ def print_syllable_ratio_table(syllable_ratio, syllables_count):
        :param syllable_ratio: Соотношение слогов к словам.
        :param syllables_count: Общее количество слогов.
        """
-    print(Fore.GREEN + Style.BRIGHT + "\n        СРЕДНЯЯ ДЛИНА СЛОВ В СЛОГАХ" + Fore.RESET)
+    print(Fore.GREEN + Style.BRIGHT +
+          "\n        СРЕДНЯЯ ДЛИНА СЛОВ В СЛОГАХ")
+    print(Fore.RED + Style.BRIGHT +
+          "Внимание! Учитываются только "
+          "слова на кириллице.")
 
     table = Table()
-    table.add_column("Показатель", style="bold", justify="left", no_wrap=True, min_width=30)
+    table.add_column("Параметр", justify="left",
+                     no_wrap=True, min_width=30, style="bold")
     table.add_column("Значение", justify="center", min_width=10)
 
     table.add_row("Длина в слогах", str(syllable_ratio))
@@ -123,4 +139,4 @@ if __name__ == "__main__":
     """
 
     mean_word_length_char(text)
-    calculate_syllable_ratio(text)
+    mean_word_length_syllab(text)

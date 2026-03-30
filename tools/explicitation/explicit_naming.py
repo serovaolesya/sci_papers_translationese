@@ -1,56 +1,82 @@
 # -*- coding: utf-8 -*- # Языковая кодировка UTF-8
-import pymorphy2
 from colorama import Fore, Style, init
-from nltk.tokenize import word_tokenize
 from rich.console import Console
 from rich.table import Table
 
-from tools.core.data.pronouns import pers_possessive_pronouns_analysis_list
+from tools.core.data.pronouns import (
+    pers_possessive_pronouns_analysis_list
+)
 from tools.core.utils import wait_for_enter_to_analyze
-from tools.explicitation.named_entities_extraction import extract_entities
+from tools.explicitation.named_entities_extraction import (
+    extract_entities
+)
 
-morph = pymorphy2.MorphAnalyzer()
 console = Console()
-init(autoreset=True)
+init(autoreset=False)
 
 
-
-def calculate_explicit_naming_ratio(text, show_analysis=True):
+def calculate_explicit_naming_ratio(
+        text,
+        parsed_words,
+        show_analysis=True
+):
     """
-    Рассчитывает параметр явного называния через отношение личных местоимений к именам собственным в тексте.
+    Рассчитывает показатель эксплицитного называния (отношение личных
+    и притяжательных местоимений к именам собственным в тексте).
 
-    :param text: Входной текст на русском языке, который будет анализироваться.
-    :param show_analysis: Если True, отображает результаты анализа в виде таблицы (по умолчанию True).
+    :param text: Входной текст на русском языке.
+    :param parsed_words: Список объектов Parse,
+    содержащих информацию о каждом токене.
+    :param show_analysis: Если True, отображает
+    результаты анализа в виде таблицы (по умолчанию True).
 
-    :return: Отношение личных местоимений к именам собственным в процентах. Если в тексте нет имен собственных, возвращается 0.
+    :return: Отношение личных местоимений к именам собственным в процентах.
+    Если в тексте нет имен собственных, возвращается 0.
+    И список с информации о найденных именованных сущностях.
     """
-    found_entities, entities_count = extract_entities(text, False)
+    found_entities, entities_count = extract_entities(
+        text, False
+    )
 
-    tokens = word_tokenize(text.lower(), language="russian")
-
-    pronouns_count = sum(1 for token in tokens if morph.parse(token)[0].normal_form in pers_possessive_pronouns_analysis_list)
+    # Считаем личные и притяжательные местоимения
+    pronouns_count = sum(
+        1 for w in parsed_words
+        if getattr(w, "normal_form", None)
+        in pers_possessive_pronouns_analysis_list
+    )
 
     if entities_count > 0:
         ratio = round((pronouns_count / entities_count) * 100, 3)
     else:
         ratio = 0
+
     if show_analysis:
-        print(Fore.GREEN + Style.BRIGHT + "\nОТНОШЕНИЕ ЛИЧНЫХ МЕСТОИМЕНИЙ К ИМЕНАМ СОБСТВЕННЫМ\n              ("
-                                          "EXPLICIT NAMING)" + Fore.RESET)
+        print(Fore.GREEN + Style.BRIGHT +
+              "\nОТНОШЕНИЕ ЛИЧНЫХ МЕСТОИМЕНИЙ "
+              "К ИМЕНАМ СОБСТВЕННЫМ\n"
+              "              "
+              "(EXPLICIT NAMING)")
 
         table = Table()
+        table.add_column("Параметр", justify="left",
+                         no_wrap=True, min_width=30, style="bold")
+        table.add_column("Значение", justify="center", min_width=10)
 
-        table.add_column("Параметр", style="bold")
-        table.add_column("Значение", justify="center", width=10)
-
-        table.add_row("Отношение (%)", f"{ratio:.2f}%")
-        table.add_row("Количество личных/притяжательных местоимений", str(pronouns_count))
-        table.add_row("Количество имен собственных", str(entities_count))
+        table.add_row(
+            "Отношение местоимений к именам"
+            "\nсобственным (%)", f"{ratio:.2f}%"
+        )
+        table.add_row(
+            "Количество личных/притяжательных "
+            "\nместоимений", str(pronouns_count)
+        )
+        table.add_row("Количество имен собственных",
+                      str(entities_count))
 
         console.print(table)
         wait_for_enter_to_analyze()
 
-    return ratio
+    return ratio, found_entities, entities_count
 
 
 if __name__ == "__main__":
@@ -64,9 +90,16 @@ if __name__ == "__main__":
     были новаторскими и требовали постоянного контроля. В свободное время он смотрел в иллюминатор на бесконечный 
     космос, размышляя о своём месте во Вселенной. По прибытию на Марс, команда начала исследования поверхности 
     планеты. Алексей был первым человеком, ступившим на красную пыль марсианской пустыни. Он взял пробы грунта и 
-    отправил их на анализ в корабль. Возвращение на Землю прошло успешно, и Алексей стал национальным героем. Его 
+    отправил их на анализ в корабль. Возвращение на Землю прошло успешно, и Алексей стал героем. Его 
     истории вдохновляли новое поколение детей мечтать о космосе. Алексей продолжил работать в космической программе, 
     передавая свой опыт молодым космонавтам. В каждом его слове чувствовалась страсть к исследованиям и вера в 
     будущее человечества среди звёзд.
     """
-    result = calculate_explicit_naming_ratio(text)
+    from tools.core.lemmatizators import lemmatize_words
+
+    parsed_words = lemmatize_words(text)
+    a, b, c = calculate_explicit_naming_ratio(text, parsed_words)
+    print(a)
+    print(b)
+    print(c)
+

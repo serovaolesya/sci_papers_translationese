@@ -117,7 +117,6 @@ abbreviations_with_point = {
     'лат.': 'латинский',
     'Inc.': 'Inc.',
     'inc.': 'inc.',
-    'сем.': 'семейство',
     'В.': 'В.',
     'рт.': 'ртутного',
     'ст.': 'столба',
@@ -131,11 +130,14 @@ abbreviations_with_point = {
     'т.': 'т.',
     'п.': 'п.',
     'Дж.': 'Дж.',
+    'мм рт.ст.': 'миллиметров ртутного столба.',
 
 }
 
 
-keys_without_point = {key.rstrip('.') for key in abbreviations_with_point.keys()}
-sorted_abbrev = sorted(keys_without_point, key=len, reverse=True)
+keys_without_point = {key.rstrip('.') for
+                      key in abbreviations_with_point.keys()}
+sorted_abbrev = sorted(keys_without_point,
+                       key=len, reverse=True)
 
 # print(sorted_abbrev)

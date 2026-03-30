@@ -1,145 +1,136 @@
 # -*- coding: utf-8 -*- # Языковая кодировка UTF-8
 import re
+from functools import lru_cache
 
-from nltk import word_tokenize
 from nltk.corpus import stopwords
 from pymorphy2 import MorphAnalyzer
 
-from tools.core.custom_punkt_tokenizer import sent_tokenize_with_abbr
 from tools.core.data import pronouns, prepositions, particles, conjunctions
-from tools.core.text_preparation import TextPreProcessor
 
 nltk_stopwords_ru = stopwords.words("russian")
 
 # 1. Объединение всех списков в один
-all_stopwords = set(conjunctions.conjunctions_list + prepositions.prepositions_list
-                    + particles.particles_list + pronouns.pronouns_list + nltk_stopwords_ru)
+all_stopwords = set(
+    conjunctions.conjunctions_list + prepositions.prepositions_list
+    + particles.particles_list + pronouns.pronouns_list + nltk_stopwords_ru
+)
 
-# 2. Сортировка по длине по убыванию
+# 2. Сортировка по длине по убыванию: длинные фразы (например,
+#    «несмотря на то что») должны проверяться раньше более коротких
+#    («несмотря на», «на»).
 all_stopwords_sorted = sorted(list(all_stopwords), key=len, reverse=True)
 
+# Единый комбинированный паттерн вместо цикла из N отдельных.
+# Было: N вызовов findall+sub (N ≈ 1760) на каждый текст.
+# Стало: один проход по тексту — на порядок быстрее.
+# Порядок альтернатив в | соответствует all_stopwords_sorted (длина ↓),
+# что гарантирует жадный захват более длинных фраз первыми.
+_COMBINED_STOPWORDS_PATTERN = re.compile(
+    r'(?<!-)\b(?:' +
+    '|'.join(re.escape(w) for w in all_stopwords_sorted) +
+    r')\b(?!-)',
+    re.IGNORECASE
+)
 
-def remove_custom_stopwords(text):
+# Разрешаем: кириллицу, латиницу и дефис `-
+_ALLOWED_CHARS = re.compile(r"[^А-Яа-яЁёA-Za-z\-]+")
+
+
+def remove_stopwords_and_filter(
+        text: str
+) -> tuple[str, int]:
     """
-    Удаляет кастомные стоп-слова из текста.
+    Удаляет стоп-слова, считает их количество,
+    затем оставляет в тексте только кириллицу,
+    латиницу и дефис '-'.
+    Возвращает очищенный текст и число удалённых стоп-слов.
 
-    :param text: Входной текст, из которого необходимо удалить стоп-слова.
-    :return: Текст без стоп-слов.
+    Важно:
+    - Границы слов учитываются, чтобы не удалять подстроки.
+    - Стоп-слова внутри сложных слов с дефисом сохраняются
+      (например, 'по-моему' не затрагивается).
+
+    :param text: Исходный текст
+    :return: (очищенный_текст, количество удаленных стоп-слов)
     """
-    # Проходим по каждому стоп-слову и заменяем его в тексте, проверяя на границы слова
-    for stopword in all_stopwords_sorted:
-        # Используем re.sub для замены стоп-слов на пустую строку
-        text = re.sub(r'(?<!-)\b' + re.escape(stopword) + r'\b(?!-)', '', text.lower())
+    if not text:
+        return "", 0
 
-    # Убираем лишние пробелы после удаления стоп-слов
-    text = re.sub(r'\s+', ' ', text).strip()
+    # 1) Удаляем все стоп-слова за один проход
+    removed_count = len(_COMBINED_STOPWORDS_PATTERN.findall(text))
+    tmp = _COMBINED_STOPWORDS_PATTERN.sub('', text)
 
-    return text
+    # 2) Фильтруем допустимые символы: кириллица/латиница/дефис '-'
+    tmp = _ALLOWED_CHARS.sub(' ', tmp)
+
+    # Нормализуем пробелы
+    cleaned_text = re.sub(r'\s+', ' ', tmp).strip()
+    return cleaned_text, removed_count
 
 
 # patterns = "[A-Za-z0-9!#$%&'()*+,./:;<=>?@[\]^_`{|}~—\"”“]
-patterns = r"[^А-Яа-яёЁ\-]+"  # Оставляем только кириллицу и дефис
+# patterns = r"[^А-Яа-яёЁ\-]+"  # Оставляем только кириллицу и дефис
+patterns = r"[^А-Яа-яёЁA-Za-z\-]+"  # оставляем кириллицу + латиницу + дефис
 
 morph = MorphAnalyzer()
 
 
-def lemmatize_words_without_stopwords(text, patterns):
+@lru_cache(maxsize=200_000)
+def parse_cached(token: str):
+    """Кэшируем лучший разбор токена.
+    Ключ кэша – нижний регистр токена."""
+    token = token.strip()
+    return morph.parse(token)[0]
+
+
+@lru_cache(maxsize=1000)
+def lemmatize_words_without_stopwords(
+        text: str
+) -> tuple[list, int]:
     """
     Лемматизирует слова в тексте после удаления кастомных стоп-слов.
 
+    Результат кэшируется по тексту целиком: повторный вызов с тем же
+    текстом (в рамках одного сеанса) возвращает сохранённый результат
+    без повторного запуска регулярок и лемматизации.
+    Возвращённый список объектов Parse не следует изменять —
+    он разделяется между всеми вызовами с одинаковым ключом.
+
     :param text: Входной текст на русском языке.
-    :param patterns: Регулярное выражение для фильтрации токенов.
-    :return: Список объектов Parse, содержащих информацию о каждом токене.
+    :return: Кортеж (tokens_full_info, stop_w_count), где
+             - tokens_full_info: список объектов Parse по каждому токену,
+             которое не является стоп-словом.
+             - stop_w_count: количество удалённых стоп-слов.
     """
-    text = remove_custom_stopwords(text)
-    text = re.sub(patterns, ' ', text)
+    cleaned_text, stop_w_count = remove_stopwords_and_filter(text)
     tokens_full_info = []
-    for token in text.split():
+    for token in cleaned_text.split():
         token = token.strip()
-        token = morph.parse(token)[0]
+        token = parse_cached(token)
         tokens_full_info.append(token)
-    return tokens_full_info
+    return tokens_full_info, stop_w_count
 
 
 def lemmatize_words(text):
     """
-    Лемматизирует слова в тексте, оставляя только кириллицу и дефис.
+    Лемматизирует слова в тексте, оставляя
+    только кириллицу, латиницу и дефис.
+    Используется в:
+    - calculate_lexical_density;
+
 
     :param text: Входной текст на русском языке.
     :return: Список объектов Parse, содержащих информацию о каждом токене.
     """
+    # Оставляем только буквенные символы
     text = re.sub(patterns, ' ', text)
-    # Предобработка текста: замена аббревиатур и исправление пробелов
-    text_processor = TextPreProcessor()
-    text = text_processor.fix_spacing(text)
 
     tokens_full_info = []
     for token in text.split():
         token = token.strip()
-        # print(token)
-        token = morph.parse(token)[0]
+        token = parse_cached(token)
         tokens_full_info.append(token)
     return tokens_full_info
-
-
-def lemmatize_words_into_sents_for_pmi(text):
-    """
-     Разбивает текст на предложения, токенизирует их, лемматизирует и возвращает список предложений,
-     где каждое предложение представлено списком лемматизированных токенов.
-     Остаются только словарные токены, предназначено для подсчета PMI.
-
-     :param text: Входной текст на русском языке.
-     :return: Список предложений, каждое из которых является списком лемматизированных токенов.
-     """
-    # Очистка текста от лишних символов, кроме знаков препинания (для токенизации по предложениям) и кириллических букв
-    text = re.sub(r'[^а-яА-ЯёЁ\s\.\!\?]', '', text)
-    sentences = sent_tokenize_with_abbr(text)
-    lemmatized_sentences = []
-    for sentence in sentences:
-        tokens = word_tokenize(sentence, language="russian")  # Токенизируем предложение на слова
-        lemmatized_tokens = [morph.parse(token)[0].normal_form for token in tokens if
-                             token not in ['.', '?', '!']]  # Лемматизируем токены и фильтруем знаки препинания
-        lemmatized_sentences.append(lemmatized_tokens)
-
-    return lemmatized_sentences
-
-
-def lemmatize_words_into_sents_for_n_grams(text):
-    """
-    Разбивает текст на предложения, токенизирует их, лемматизирует и возвращает список предложений,
-    где каждое предложение представлено списком лемматизированных токенов и их частей речи.
-
-    :param text: Входной текст на русском языке.
-    :return: Кортеж из двух списков:
-        - tokens_pos: Список токенов с метками частей речи и специальными маркерами для начала и конца предложений.
-        - lemmas: Список лемматизированных токенов.
-    """
-    # Разделяем слова и знаки препинания пробелами
-    text = re.sub(r'([\.\,\!\?\;\%\)\)\[\]\:\—])', r' \1 ', text)
-    # Очистка текста от лишних символов, кроме знаков препинания (для токенизации по предложениям) и кириллических букв
-    text = re.sub(r'[^а-яА-ЯёЁ\s\.\!\?\,\-]', '', text)
-    tokens_pos = []
-    lemmas = []
-    previous_token = None
-    for token in text.split():
-        token = token.strip()
-        parsed_token = morph.parse(token)[0]
-        # Обработка конца предложения
-        if previous_token and previous_token in '!?.]' and token[0].isupper():
-            tokens_pos.append('S_START')
-
-        if parsed_token.tag.POS:
-            tokens_pos.append(parsed_token.tag.POS)
-            lemmas.append(parsed_token.normal_form)
-        if parsed_token.normal_form in '!?.]':
-            tokens_pos.append('S_END')
-            lemmas.append(parsed_token.normal_form)
-        if parsed_token.normal_form in ',':
-            tokens_pos.append('COMMA')
-            lemmas.append(parsed_token.normal_form)
-        previous_token = parsed_token.normal_form
-
-    return tokens_pos, lemmas
 
 
 if __name__ == "__main__":
@@ -156,18 +147,18 @@ if __name__ == "__main__":
     любили друг друга. Дом был полон книг, и все члены семьи любили читать. Они часто сидели в библиотеке и читали 
     книги, которые были написаны известными авторами. Семья была любима всеми, и к ней всегда приходили гости."""
 
-    a = lemmatize_words_without_stopwords(text, patterns)
+    import warnings
+
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        module="pymorphy2.analyzer"
+    )
+
+    a = lemmatize_words_without_stopwords(text)
     b = lemmatize_words(text)
-    c = lemmatize_words_into_sents_for_n_grams(text)
-    d = lemmatize_words_into_sents_for_pmi(text)
 
     print(a)
-    print()
+    # print()
 
     print(b)
-    print()
-
-    print(c)
-    print()
-
-    print(d)

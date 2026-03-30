@@ -1,75 +1,84 @@
 # -*- coding: utf-8 -*- # Языковая кодировка UTF-8
 import json
-from collections import Counter, defaultdict
 
-from colorama import Fore, Style
+from colorama import Fore, Style, init
 from rich.console import Console
 from rich.table import Table
 
-from tools.core.lemmatizators import lemmatize_words_without_stopwords
 from tools.core.utils import wait_for_enter_to_analyze
 
 console = Console()
-patterns = r"[^А-Яа-яёЁa-zA-Z\-]+"
+init(autoreset=False)
 
 
-def count_types_in_text(text):
+def find_n_most_frequent_words(
+        total_tokens_count: int,
+        content_word_counts_json: str,
+        values=(5, 10, 50,),
+        show_analysis=True
+):
     """
-    Лемматизирует текст, подсчитывает количество знаменательных частей речи и возвращает результат в формате JSON.
+    Выводит наиболее частотные слова в тексте с
+    нормализованными частотами.
 
-    Функция принимает текст, лемматизирует его, затем подсчитывает, как часто встречаются знаменательные части речи
-    (существительные, глаголы, прилагательные и наречия). В конце результат выводится в формате JSON.
-
-    :param text: Строка текста, который необходимо проанализировать.
-    :return: JSON-объект, содержащий абсолютную частоту встречаемости знаменательных слов.
+    :param total_tokens_count: Общее число токенов в
+    тексте (для нормализации).
+    :param content_word_counts_json: Абсолютные
+    частоты знаменательных слов — JSON-строка
+    :param values: Кортеж размеров топ-списков
+     (По умолчанию: 5, 10, 50).
+    :param show_analysis: Если True,
+    выводит результаты в виде таблицы.
+    :return: JSON-строка с нормализованными
+    частотами знаменательных слов относительно всех
+    словарных токенов в тексте (%), ключи — леммы.
     """
-    words = lemmatize_words_without_stopwords(text.lower(), patterns)
-    word_list = [token.normal_form for token in words]
-    significant_words_count = defaultdict(int)
+    content_word_counts: dict[str, int] = (
+        json.loads(content_word_counts_json)
+    )
 
-    for word in word_list:
-        significant_words_count[word] += 1
-
-    result_json = json.dumps(significant_words_count, ensure_ascii=False, indent=4)
-
-    return result_json
-
-
-def find_n_most_frequent_words(text, values=(50,), show_analysis=True):
-    """
-    Выводит наиболее частотные слова в тексте с нормализованными частотами.
-
-    :param text: Текст для анализа.
-    :param values: Кортеж, содержащий количество наиболее частотных слов, которые нужно вывести. По умолчанию 50.
-    :param show_analysis: Если True, выводит результаты в виде таблицы и ожидает нажатия клавиши для продолжения.
-    :return: Строка, представляющая собой словарь наиболее частотных слов с нормализованными частотами.
-    """
-    words = lemmatize_words_without_stopwords(text.lower(), patterns)
-    word_list = [token.normal_form for token in words]
-    word_counts = Counter(word_list)
-    total_words = sum(word_counts.values())
-    normalized_frequencies = {word: round((count / total_words) * 100, 3) for word, count in word_counts.items()}
-
-    frequent_words = {}
-    for n in values:
-        frequent_words[n] = dict(sorted(normalized_frequencies.items(), key=lambda item: item[1], reverse=True)[:n])
+    normalized_frequencies = {
+        word: round((count / total_tokens_count) * 100, 3)
+        for word, count in content_word_counts.items()
+    }
 
     if show_analysis:
-        print(Fore.GREEN + Style.BRIGHT + "\n     НАИБОЛЕЕ ЧАСТОТНЫЕ 50 СЛОВ ТЕКСТА" + Fore.RESET)
-        wait_for_enter_to_analyze()
-        for n, words in frequent_words.items():
-            table = Table()
-            table.add_column("№", justify="center")
-            table.add_column("Слово\n", style="bold")
-            table.add_column("Нормализованная\nчастота (%)", justify="center")
+        for top_n in values:
+            top_items = sorted(
+                normalized_frequencies.items(),
+                key=lambda item: item[1],
+                reverse=True
+            )[:top_n]
 
-            for idx, (word, freq) in enumerate(words.items(), start=1):
+            print(Fore.GREEN + Style.BRIGHT +
+                  f"\n {top_n} НАИБОЛЕЕ ЧАСТОТНЫХ"
+                  f" ЗНАМЕНАТЕЛЬНЫХ СЛОВ")
+            wait_for_enter_to_analyze()
+
+            table = Table()
+            table.add_column("№", style="bold",
+                             justify="center")
+            table.add_column("Слово\n", style="bold",
+                             justify="center")
+            table.add_column("Нормализованная\nчастота (%)",
+                             justify="center")
+
+            for idx, (word, freq) in enumerate(top_items, start=1):
                 table.add_row(str(idx), word, f"{freq}%")
 
             console.print(table)
             wait_for_enter_to_analyze()
 
-    return str(frequent_words)
+    sorted_normalized_frequencies = dict(
+        sorted(
+            normalized_frequencies.items(),
+            # по частоте ↓, при равенстве — по алфавиту
+            key=lambda kv: (-kv[1], kv[0])
+        )
+    )
+    return json.dumps(
+        sorted_normalized_frequencies, ensure_ascii=False, indent=4
+    )
 
 
 if __name__ == "__main__":
@@ -85,5 +94,17 @@ if __name__ == "__main__":
     деревьев. Где-то рядом слышался тихий плеск воды из фонтана. Люди начинали расходиться по домам, постепенно покидая 
     парк. И вот, когда город погрузился в вечерние сумерки, наступила долгожданная тишина.
     """
-    a = count_types_in_text(text)
+    import re
+
+    from tools.core.utils import count_types_in_text
+
+    total_alpha_tokens_count = len(re.findall(r'\b\w+\b', text))
+
+    json_content_word_counts = (
+        count_types_in_text(text.lower())
+    )
+    a = find_n_most_frequent_words(
+        total_alpha_tokens_count,
+        json_content_word_counts
+    )
     print(a)

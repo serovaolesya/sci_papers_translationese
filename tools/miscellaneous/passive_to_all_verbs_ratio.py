@@ -2,28 +2,34 @@
 import re
 
 from colorama import Fore, Style
-from nltk import word_tokenize
+from natasha import (
+    Segmenter,
+    NewsEmbedding,
+    NewsMorphTagger,
+    Doc,
+)
 from pymorphy2 import MorphAnalyzer
 from rich.console import Console
 from rich.table import Table
 
 from tools.core.utils import wait_for_enter_to_analyze
-from tools.core.text_preparation import TextPreProcessor
 
 console = Console()
 
-# Инициализация анализатора
 morph = MorphAnalyzer()
 
 patterns = r"[^А-Яа-яёЁ\-]+"  # Оставляем только кириллицу и дефис
 
 
-def calculate_passive_verbs_ratio(text, show_analysis=True):
+def calculate_passive_verbs_ratio(text, show_analysis=True,
+                                   segmenter=None, morph_tagger=None):
     """
     Подсчитывает соотношение глаголов в пассивном залоге ко всем глаголам в тексте.
 
     :param text: str - Текст для анализа.
     :param show_analysis: Bool - Флаг для отображения анализа (по умолчанию True).
+    :param segmenter: Segmenter - внешний сегментатор (если None — создаётся внутри).
+    :param morph_tagger: NewsMorphTagger - внешний теггер (если None — создаётся внутри).
 
     :return: tuple - Кортеж из пяти элементов:
         - float: Соотношение пассивных глаголов к общему количеству глаголов в процентах.
@@ -32,35 +38,43 @@ def calculate_passive_verbs_ratio(text, show_analysis=True):
         - str: Список всех глаголов в виде строки.
         - int: Общее количество глаголов.
     """
+    if segmenter is None:
+        segmenter = Segmenter()
+    if morph_tagger is None:
+        _emb = NewsEmbedding()
+        morph_tagger = NewsMorphTagger(_emb)
+
     passive_verbs_count = 0
-    passive_verbs = []
+    passive_verbs_list = []
     all_verbs_count = 0
-    all_verbs = []
+    all_verbs_list = []
 
-    text_processor = TextPreProcessor()
-    text = text_processor.process_text(text)
     text = re.sub(patterns, ' ', text)
-    tokens = word_tokenize(text, language="russian")
+    doc = Doc(text)
+    doc.segment(segmenter)
+    doc.tag_morph(morph_tagger)
 
-    for token in tokens:
-        token_analysis = morph.parse(token)[0]
-        if (token_analysis.tag.POS in {'VERB', 'INFN', 'PRTF', 'PRTS', 'GRND'}
-                and token_analysis.normal_form not in 'быть'):  # Если это глагол/ его форма
+    for token in doc.tokens:
+        natasha_pos = token.pos
+        token_pymorphy_info = morph.parse(token.text)[0]
+        if (token_pymorphy_info.tag.POS in {
+            'VERB', 'INFN', 'PRTF', 'PRTS', 'GRND'
+        } and natasha_pos != 'AUX'):  # Если это глагол/ его форма
             all_verbs_count += 1
-            all_verbs.append(token_analysis.word)
+            all_verbs_list.append(token_pymorphy_info.word)
             # Определяем залог
-            voice = token_analysis.tag.voice
+            voice_py = token_pymorphy_info.tag.voice
 
-            if voice == 'pssv':
+            if voice_py == 'pssv' or (token.feats and token.feats.get('Voice') == 'Pass'):
                 passive_verbs_count += 1
-                passive_verbs.append(token_analysis.word)
+                passive_verbs_list.append(token_pymorphy_info.word)
 
     if all_verbs_count > 0:
         passive_to_all_v_ratio = round((passive_verbs_count / all_verbs_count) * 100, 3)
     else:
         passive_to_all_v_ratio = 0
-    passive_verbs_str = str(passive_verbs)
-    all_verbs_str = str(all_verbs)
+    passive_verbs_str = str(passive_verbs_list)
+    all_verbs_str = str(all_verbs_list)
 
     if show_analysis:
         print_passive_verbs_ratio(passive_to_all_v_ratio, passive_verbs_str, passive_verbs_count, all_verbs_str,
@@ -97,7 +111,7 @@ def print_passive_verbs_ratio(ratio, passive_verbs_str, passive_verbs_count, all
 
 if __name__ == "__main__":
     # Текст для примера (сгенерирован ИИ)
-    text = """В старом доме на окраине города жила семья, которая была известна своей гостеприимностью. Дом был 
+    text = """В старом доме на окраине города жила семья, которая была известна своей, гостеприимностью. Дом был 
     построен много лет назад и был окружен большим садом, который был засажен цветами и деревьями. Семья была любима 
     всеми соседями, и к ней часто приходили гости. Семья была большая, и в ней было много детей, которые всегда 
     играли во дворе. Дети были веселыми и любопытными, и они всегда находили что-то интересное, чтобы сделать. Они 

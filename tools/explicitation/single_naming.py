@@ -6,41 +6,78 @@ from rich.console import Console
 from rich.table import Table
 
 from tools.core.utils import wait_for_enter_to_analyze
-from tools.explicitation.named_entities_extraction import extract_entities
 
 console = Console()
 
 
-def single_naming_frequency(text, show_analysis=True):
+def single_naming_frequency(
+        entities_info,
+        show_analysis=True
+):
     """
-    Вычисляет частоту имен собственных, состоящих из одного токена, без соседних имен собственных.
+    Вычисляет отношение именованных сущностей, состоящих
+    из одного токена, ко всем именованным сущностям.
 
-    :param text: Входной текст на русском языке.
-    :param show_analysis: Флаг, определяющий, нужно ли выводить анализ в консоль. По умолчанию True.
+    :param entities_info: Список сущностей в формате
+    [["текст", "тип"], ...] или строка с таким представлением.
+    :param show_analysis: Флаг, определяющий,
+    нужно ли выводить анализ в консоль.
+    По умолчанию True.
 
     :return: Частота одиночных имен собственных в процентах.
     """
-    found_entities_str, entities_count = extract_entities(text, False)
-    found_entities = ast.literal_eval(found_entities_str)  # Преобразуем строку в список кортежей
     single_entities_count = 0
 
-    for entity, entity_type in found_entities:
-        if len(entity.split()) == 1:
+    # Нормализуем вход: extract_entities может
+    # вернуть строку вида "[[...]]"
+    if isinstance(entities_info, str):
+        try:
+            entities_info = ast.literal_eval(entities_info)
+        except Exception:
+            # Если парсинг не удался, считаем список пустым
+            entities_info = []
+
+    # Гарантируем, что это итерируемая последовательность
+    if not entities_info:
+        entities_info = []
+
+    entities_count = len(entities_info)
+
+    for item in entities_info:
+        # ожидаем кортеж/список из двух элементов:
+        # (entity, entity_type)
+        try:
+            entity, entity_type = item
+        except (ValueError, TypeError):
+            continue
+        if (isinstance(entity, str) and
+                len(entity.split()) == 1
+        ):
             single_entities_count += 1
 
-    single_entities_frequency = round(single_entities_count / entities_count * 100, 3) if entities_count > 0 else 0.0
+    single_entities_frequency = (
+        round(single_entities_count / entities_count * 100, 3)
+    ) if entities_count > 0 else 0.0
+
     if show_analysis:
-        print(Fore.GREEN + Style.BRIGHT + "\nОТНОШЕНИЕ ОДНОТОКЕННЫХ ИМЕНОВАННЫХ СУЩНОСТЕЙ КО ВСЕМ "
-                                                   "ИМЕНОВАННЫМ СУЩНОСТЯМ"
-                                                   "\n                           (SINGLE NAMING)" + Fore.RESET)
+        print(Fore.GREEN + Style.BRIGHT +
+              "\nОТНОШЕНИЕ ИМЕНОВАННЫХ СУЩНОСТЕЙ"
+              " ИЗ 1-ГО ТОКЕНА КО ВСЕМ "
+              "ИМЕНОВАННЫМ СУЩНОСТЯМ"
+              "\n                           "
+              "(SINGLE NAMING)")
         table = Table()
 
-        table.add_column("Параметр", style="bold")
-        table.add_column("Значение", justify="center", width=22)
+        table.add_column("Параметр", justify="left",
+                         no_wrap=True, min_width=30, style="bold")
+        table.add_column("Значение", justify="center", min_width=10)
 
-        table.add_row("Отношение (%)", f"{single_entities_frequency:.2f}%")
-        table.add_row("Количество одиночных именованных сущностей", str(single_entities_count))
-        table.add_row("Общее количество именованных сущностей", str(entities_count))
+        table.add_row("Отношение (%)",
+                      f"{single_entities_frequency:.2f}%")
+        table.add_row("Количество одиночных именованных сущностей",
+                      str(single_entities_count))
+        table.add_row("Общее количество именованных сущностей",
+                      str(entities_count))
 
         console.print(table)
         wait_for_enter_to_analyze()
@@ -73,5 +110,13 @@ if __name__ == "__main__":
     оставаясь верной своей мечте — сделать мир лучше. Она знала, что впереди ещё много вызовов, но с каждым добрым 
     делом, с каждой спасённой жизнью, с каждой улыбкой на лице благодарного человека мир становился чуть светлее и 
     добрее."""
+    from colorama import Fore, init
+    init(autoreset=True)
 
-    single_naming_frequency(text)
+    from tools.explicitation.named_entities_extraction import (
+        extract_entities
+    )
+    found_entities, entities_count = extract_entities(
+        text, False
+    )
+    single_naming_frequency(found_entities)

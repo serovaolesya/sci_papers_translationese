@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from tools.core.data import pronouns, prepositions, particles, conjunctions
+from tools.core.lemmatizators import parse_cached
 from tools.core.utils import wait_for_enter_to_analyze
 
 console = Console()
@@ -56,7 +57,7 @@ def compute_function_word_frequencies(text, show_analysis=True):
     for token in tokens:
         # Учитываем, что составные стоп-слова уже заменены на уникальные маркеры
         token = re.sub(r'_', ' ', token)
-        token = morph.parse(token)[0]
+        token = parse_cached(token)
         lemmatized_token = token.normal_form
         if lemmatized_token in all_stopwords_sorted:
             function_word_counts[lemmatized_token] += 1

@@ -9,8 +9,10 @@ from tools.core.data.discource_markers import final_sci_dm_list
 nltk_stopwords_ru = stopwords.words("russian")
 
 # 1. Объединение всех списков stopwords в один
-all_stopwords = set(conjunctions.conjunctions_list + prepositions.prepositions_list
-                    + particles.particles_list + pronouns.pronouns_list + nltk_stopwords_ru)
+all_stopwords = set(
+    conjunctions.conjunctions_list + prepositions.prepositions_list
+    + particles.particles_list + pronouns.pronouns_list + nltk_stopwords_ru
+)
 # 2. Сортировка stopwords по длине по убыванию
 all_stopwords_sorted = sorted(list(all_stopwords), key=len, reverse=True)
 
@@ -21,10 +23,15 @@ def count_custom_stopwords(text):
     Args:
         text (str): Текст для анализа.
     Returns:
-        tuple: Общее количество найденных стоп-слов, словарь, где ключи - это стоп-слова,
-               а значения - количество их вхождений в текст, и общее количество вхождений всех стоп-слов в тексте.
+        tuple: Общее количество найденных стоп-слов,
+        словарь, где ключи - это стоп-слова,
+        а значения - количество их вхождений в текст,
+        и общее количество вхождений всех стоп-слов в тексте.
     """
-    stopword_counts = {stopword: 0 for stopword in all_stopwords_sorted}
+    stopword_counts = {
+        stopword: 0 for stopword
+        in all_stopwords_sorted
+    }
     text_to_clean = text.lower()
 
     for stopword in all_stopwords_sorted:
@@ -47,40 +54,68 @@ def count_custom_stopwords(text):
     # for stopword, count in sorted_stopwords.items():
     #     print(f"'{stopword}': {count} раз(а)")
 
-    return stopwords_total_count_with_rep, sorted_stopwords, unique_stopwords
+    return (
+        stopwords_total_count_with_rep,
+        sorted_stopwords,
+        unique_stopwords
+    )
 
 
-patterns = r"[^А-Яа-яёЁ\-]+"  # Оставляем только кириллицу и дефис
+_DM_LIST_CLEANED = []
+for _dm in final_sci_dm_list:
+    _dm_clean = _dm.strip().lower()
+    _dm_clean = re.sub(r'[\,\.;:!?]+$', '', _dm_clean)
+    if _dm_clean:
+        _DM_LIST_CLEANED.append(_dm_clean)
 
+
+_DM_LIST_CLEANED = sorted(set(_DM_LIST_CLEANED), key=len, reverse=True)
+_DM_ALTERNATION = "|".join(map(re.escape, _DM_LIST_CLEANED))
+_DM_PATTERN = re.compile(
+    rf'(?<!\w)(?:{_DM_ALTERNATION})(?!\w)[\s]*[\,\.;:!?—–-]*',
+    re.IGNORECASE
+)
+
+
+def rebuild_dm_pattern():
+    """Rebuild the global DM regex after
+    external updates to final_sci_dm_list."""
+    global _DM_LIST_CLEANED, _DM_ALTERNATION, _DM_PATTERN
+    _DM_LIST_CLEANED = []
+    for _dm in final_sci_dm_list:
+        _dm_clean = _dm.strip().lower()
+        _dm_clean = re.sub(r'[\,\.;:!?]+$', '', _dm_clean)
+        if _dm_clean:
+            _DM_LIST_CLEANED.append(_dm_clean)
+    _DM_LIST_CLEANED = sorted(set(_DM_LIST_CLEANED), key=len, reverse=True)
+    _DM_ALTERNATION = "|".join(map(re.escape, _DM_LIST_CLEANED))
+    _DM_PATTERN = re.compile(
+        rf'(?<!\w)(?:{_DM_ALTERNATION})(?!\w)[\s]*[\,\.;:!?—–-]*',
+        re.IGNORECASE
+    )
 
 def remove_dm(text):
     """
-    Функция удаляет дискурсивные маркеры из текста и считает их количество.
+    Функция удаляет дискурсивные маркеры из текста
+    и считает их количество.
 
     Параметры:
-    text (str): Входной текст, из которого удаляются маркеры.
+    text (str): Входной текст.
 
     Возвращает:
-    tuple: (обновленный текст без маркеров, количество удаленных маркеров)
+    tuple: (обновленный текст без маркеров,
+    количество удаленных маркеров)
     """
-    # Преобразуем текст в нижний регистр для удобства поиска маркеров
-    text_lower = text.lower()
-    deleted_dms = 0
 
-    # Проходим по каждому дискурсивному маркеру
-    for dm in final_sci_dm_list:
-        # Проверяем наличие маркера в тексте
-        count_before = len(re.findall(r'\b' + re.escape(dm) + r'\b', text_lower))
-        if count_before > 0:
-            # Заменяем маркер на пустую строку
-            text_lower = re.sub(r'\b' + re.escape(dm) + r'\b', '', text_lower)
-            deleted_dms += count_before
+    # Один проход замены + счёт с
+    # уже предкомпилированным шаблоном
+    text_no_dm, deleted_dms_num = _DM_PATTERN.subn('', text)
 
-    # Убираем лишние пробелы после удаления маркеров
-    text_lower = re.sub(r'\s+', ' ', text_lower).strip()
-    # Удаляем небуквенные символы
-    text_cleaned = re.sub(r'[^а-яА-Яa-zA-Z\s]', '', text_lower)
-    return text_cleaned, deleted_dms
+    # Подчистка пробелов и небуквенных
+    text_no_dm = re.sub(r'\s+', ' ', text_no_dm).strip()
+    text_cleaned = re.sub(r'[^а-яА-Яa-zA-Z\s-]', '', text_no_dm)
+
+    return text_cleaned, deleted_dms_num
 
 
 if __name__ == "__main__":

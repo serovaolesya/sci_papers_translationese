@@ -137,3 +137,7 @@ dmypy.json
 
 # .idea
 .idea
+venv/
+.DS_Store
+req
+tools/explicitation/model.bin

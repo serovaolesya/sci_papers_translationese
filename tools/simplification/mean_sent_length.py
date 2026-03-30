@@ -1,57 +1,53 @@
 # -*- coding: utf-8 -*- # Языковая кодировка UTF-8
 import re
 
-from colorama import Fore, Style
+from colorama import Fore, Style, init
 from nltk.tokenize import word_tokenize
 from rich.console import Console
 from rich.table import Table
 
-from tools.core.custom_punkt_tokenizer import sent_tokenize_with_abbr
 from tools.core.utils import wait_for_enter_to_analyze
-from tools.core.text_preparation import TextPreProcessor
 
 console = Console()
+init(autoreset=True)
 
 
-def tokenize_with_punctuation(text):
+def mean_sentence_length_in_tokens(
+        sent_list, show_analysis=True
+):
     """
-    Разделяет текст на токены, учитывая небуквенные знаки как отдельные токены.
+    Вычисляет среднюю длину предложения в токенах
+    (включая знаки препинания).
 
-    :param text (str): Текст для токенизации.
-    :return list: Список токенов, включая знаки препинания.
-    """
-    tokens = word_tokenize(text, language="russian")
-    return tokens
-
-
-def mean_sentence_length_in_tokens(text, show_analysis=True):
-    """
-    Вычисляет среднюю длину предложения в токенах (включая знаки препинания).
-
-    :param text: Текст для анализа.
-    :param show_analysis: Если True, выводит результат в виде таблицы.
+    :param sent_list: Список предложений текста.
+    :param show_analysis: Если True,
+    выводит результат в виде таблицы.
     :return float: Средняя длина предложений в токенах.
     """
-    text_processor = TextPreProcessor()
-    text = text_processor.fix_spacing_for_mean_sent_len(text)
     sentence_lengths = []
-    sentences = sent_tokenize_with_abbr(text)
 
     # Подсчитываем токены в каждом предложении
-    for sentence in sentences:
-        tokens = tokenize_with_punctuation(sentence)
+    for sentence in sent_list:
+        tokens = word_tokenize(sentence, language="russian")
         sentence_lengths.append(len(tokens))
 
-    mean_sent_length = round((sum(sentence_lengths) / len(sentence_lengths)), 3) if sentence_lengths else 0
+    mean_sent_length = round(
+        (sum(sentence_lengths) / len(sentence_lengths)), 3
+    ) if sentence_lengths else 0
+
     if show_analysis:
         # Создаем таблицу для вывода
-        print(Fore.GREEN + Style.BRIGHT + "\n   СРЕДНЯЯ ДЛИНА ПРЕДЛОЖЕНИЙ В ТОКЕНАХ" + Fore.RESET)
-        print(Fore.LIGHTRED_EX + Style.BRIGHT + "Знаки препинания считаются как токены." + Fore.RESET)
+        print(Fore.GREEN + Style.BRIGHT +
+              "\n     СРЕДНЯЯ ДЛИНА ПРЕДЛОЖЕНИЙ В ТОКЕНАХ")
+        print(Fore.RED + Style.BRIGHT +
+              "Внимание! Знаки препинания "
+              "считаются как токены.")
         table = Table()
-        table.add_column("Показатель", style="bold")
+        table.add_column("Параметр", justify="left",
+                         no_wrap=True, min_width=30, style="bold")
         table.add_column("Значение", justify="center", min_width=10)
 
-        table.add_row("Длина в токенах", str(mean_sent_length))
+        table.add_row("Ср. длина в токенах", str(mean_sent_length))
         table.add_row("Всего токенов", str(sum(sentence_lengths)))
         table.add_row("Всего предложений", str(len(sentence_lengths)))
         console.print(table)
@@ -60,31 +56,37 @@ def mean_sentence_length_in_tokens(text, show_analysis=True):
     return mean_sent_length
 
 
-def mean_sentence_length_in_chars(text, show_analysis=True):
+def mean_sentence_length_in_chars(sent_list: list, show_analysis=True):
     """
     Вычисляет среднюю длину предложения в символах (без учета пробелов).
 
-    :param text: Текст для анализа.
+    :param sent_list: Список предложений текста.
     :param show_analysis: Если True, выводит результат в виде таблицы.
     :return float:  Средняя длина предложений в символах.
     """
     sentence_lengths = []
-    sentences = sent_tokenize_with_abbr(text)
-
     # Подсчитываем количество символов в каждом предложении
-    for sentence in sentences:
-        cleaned_sentence = re.sub(r'\s+', '', sentence)  # Удаляем пробелы
+    for sentence in sent_list:
+        cleaned_sentence = re.sub(r'\s+', '', sentence)
         length = len(cleaned_sentence)
         sentence_lengths.append(length)
+    print()
 
-    mean_sent_length = round((sum(sentence_lengths) / len(sentence_lengths)), 3) if sentence_lengths else 0
+    mean_sent_length = round(
+        (sum(sentence_lengths) / len(sentence_lengths)
+         ), 3) if (
+        sentence_lengths
+    ) else 0
+
     if show_analysis:
-        print(Fore.GREEN + Style.BRIGHT + "\nСРЕДНЯЯ ДЛИНА ПРЕДЛОЖЕНИЙ В СИМВОЛАХ" + Fore.RESET)
+        print(Fore.GREEN + Style.BRIGHT +
+              "     СРЕДНЯЯ ДЛИНА ПРЕДЛОЖЕНИЙ В СИМВОЛАХ")
         table = Table()
-        table.add_column("Показатель", style="bold")
+        table.add_column("Параметр", justify="left",
+                         no_wrap=True, min_width=30, style="bold")
         table.add_column("Значение", justify="center", min_width=10)
 
-        table.add_row("Длина в символах", str(mean_sent_length))
+        table.add_row("Ср. длина в символах", str(mean_sent_length))
         table.add_row("Всего символов", str(sum(sentence_lengths)))
         table.add_row("Всего предложений", str(len(sentence_lengths)))
         console.print(table)
@@ -94,17 +96,8 @@ def mean_sentence_length_in_chars(text, show_analysis=True):
 
 
 if __name__ == "__main__":
-    # Текст для примера (сгенерирован ИИ)
-    text = """
-    Осенний ветер за окном напоминал о скором приходе холодов. Листья деревьев медленно кружились в воздухе, постепенно 
-    покрывая землю золотым ковром. В парке гуляли немногочисленные прохожие, наслаждаясь последними тёплыми днями. Вдоль 
-    аллеи бежала собака, радостно виляя хвостом. Маленький мальчик с интересом наблюдал за ней, крепко держа за руку свою 
-    маму. Она говорила ему о том, как важно сохранять природу и уважать окружающий мир. Вдалеке был виден силуэт 
-    человека, сидящего на лавочке с книгой. Он не спешил никуда, погружённый в чтение. Вокруг царила атмосфера 
-    умиротворённости и спокойствия. Солнце постепенно уходило за горизонт, окутывая парк мягким оранжевым светом. Небо 
-    меняло свой цвет, переходя от светло-голубого к насыщенному розовому. Птицы готовились к ночи, прячась в ветвях 
-    деревьев. Где-то рядом слышался тихий плеск воды из фонтана. Люди начинали расходиться по домам, постепенно покидая 
-    парк. И вот, когда город погрузился в вечерние сумерки, наступила долгожданная тишина.
-    """
+    # Список предложений для примера:
+    text = ['Осенний ветер за окном напоминал о скором приходе холодов.',
+            'Листья деревьев медленно кружились в воздухе.']
     mean_sentence_length_in_tokens(text)
     mean_sentence_length_in_chars(text)
